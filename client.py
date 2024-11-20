@@ -37,9 +37,9 @@ def run(url):
     auth_header = urlencode(
         {"username": username, "password": password, "machine_id": machine_id}
     )
-    response = requests.get(url, headers={"SEEK_CUSTOM_AUTH": auth_header})
-    print(response.json())
+    response = requests.get(url, headers={"SEEK-CUSTOM-AUTH": auth_header})
+    print(response.content)  # NOQA: T201
 
 
 if __name__ == "__main__":
-    run()
+    run(sys.argv[1])
