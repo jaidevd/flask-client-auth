@@ -1,6 +1,7 @@
 import argparse
 import os
 import sqlite3
+from typing import Tuple
 from urllib.parse import parse_qs
 
 from bcrypt import hashpw
@@ -8,6 +9,7 @@ from flask import Flask, request, current_app
 
 
 def init_db():
+    """Initialize an SQLite database with a 'users (username, password, machine_id)' table."""
     db_path = current_app.config["DB_PATH"]
     if not os.path.exists(db_path):
         with sqlite3.connect(db_path) as conn:
@@ -22,13 +24,28 @@ def init_db():
             )
 
 
-def login(auth):
+def login(username: str, password: str, machine_id: str) -> bool:
+    """Check if the user is authorized to access the server.
+
+    If the user exists and sends a machine ID for the first time, it is updated.
+    If the specified machine ID belongs to a different user, the request is rejected.
+    Passwords are checked each time.
+
+    Parameters:
+    -----------
+    username : str
+        The username of the user.
+    password : str
+        The password of the user.
+    machine_id : str
+        The machine ID of the user.
+
+    Returns
+    -------
+    bool
+        Whether the user is authorized.
+    """
     db_path = current_app.config["DB_PATH"]
-    username, password, machine_id = (
-        auth["username"],
-        auth["password"],
-        auth["machine_id"],
-    )
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -57,7 +74,8 @@ def login(auth):
         return False
 
 
-def index():
+def index() -> Tuple[str, int]:
+    """Default view needed for the flask app."""
     auth = request.headers.get("Seek-Custom-Auth")
     if not auth:
         return "Bad Request: Authentication header 'Seek-Custom-Auth' not found.", 400
@@ -66,12 +84,21 @@ def index():
         if key not in auth:
             return f"Bad Request: Missing key '{key}' in authentication header.", 400
     auth["password"] = hashpw(auth["password"].encode(), current_app.config["SALT"])
-    if login(auth):
-        return "OK"
+    if login(**auth):
+        return "OK", 200
     return "Unauthorized", 401
 
 
-def add_user(username, password):
+def add_user(username: str, password: str) -> None:
+    """Add a user in the DB.
+
+    Parameters
+    ----------
+    username : str
+        username to add
+    password : str
+        password to add
+    """
     db_path = current_app.config["DB_PATH"]
     password = hashpw(password.encode(), current_app.config["SALT"])
     with sqlite3.connect(db_path) as conn:
@@ -82,7 +109,16 @@ def add_user(username, password):
         conn.commit()
 
 
-def update_password(username, new_password):
+def update_password(username: str, new_password: str) -> None:
+    """Update the password for a user.
+
+    Parameters
+    ----------
+    username : str
+        username
+    new_password : str
+        The new password to replace the old one.
+    """
     db_path = current_app.config["DB_PATH"]
     new_password = hashpw(new_password.encode(), current_app.config["SALT"])
     with sqlite3.connect(db_path) as conn:
@@ -93,7 +129,14 @@ def update_password(username, new_password):
         conn.commit()
 
 
-def delete_user(username):
+def delete_user(username: str) -> None:
+    """Delete a user from the database.
+
+    Parameters
+    ----------
+    username : str
+        The username to delete.
+    """
     db_path = current_app.config["DB_PATH"]
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -101,13 +144,18 @@ def delete_user(username):
         conn.commit()
 
 
-def make_cli():
+def make_cli() -> argparse.ArgumentParser:
     """Make an argparse object for the CLI.
 
     1. Run the flask server (default)
     2. Add a username and password
     3. Update the password for a user
     4. Delete a user
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        A parser with the specified options, defaults and help messages.
     """
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
@@ -129,6 +177,24 @@ def make_cli():
 
 
 def make_app(db_path="auth.db", salt=b"$2b$12$emU0Je9vTNLx9RzvGe/go.", **kwargs):
+    """Generate a flask application.
+
+    Typical factory function.
+
+    Parameters
+    ----------
+    db_path : str, optional
+        Path to the auth database.
+    salt : str, optional
+        Salt used to encrypt passwords.
+    kwargs : dict
+        kwargs passed to the Flask app configuration
+
+    Returns
+    -------
+    Flask
+        A Flask application.
+    """
     app = Flask(__name__)
     app.config.update({"SALT": salt, "DB_PATH": db_path, **kwargs})
     app.add_url_rule("/check", view_func=index, methods=["GET"])
