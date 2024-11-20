@@ -7,12 +7,6 @@ from bcrypt import hashpw
 from flask import Flask, request, current_app
 
 
-def create_app():
-    app = Flask(__name__)
-    app.config.update({"SALT": b"$2b$12$emU0Je9vTNLx9RzvGe/go.", "DB_PATH": "auth.db"})
-    return app
-
-
 def init_db():
     db_path = current_app.config["DB_PATH"]
     if not os.path.exists(db_path):
@@ -134,8 +128,9 @@ def make_cli():
     return parser
 
 
-def make_app():
-    app = create_app()
+def make_app(db_path="auth.db", salt=b"$2b$12$emU0Je9vTNLx9RzvGe/go.", **kwargs):
+    app = Flask(__name__)
+    app.config.update({"SALT": salt, "DB_PATH": db_path, **kwargs})
     app.add_url_rule("/check", view_func=index, methods=["GET"])
     with app.app_context():
         init_db()
